@@ -24,7 +24,14 @@ def init_rqdatac():
     Raises:
         RuntimeError: 连接失败或缺少必要的环境变量
     """
-    import rqdatac
+    try:
+        import rqdatac
+    except ModuleNotFoundError as e:
+        raise RuntimeError(
+            "[ERROR] rqdatac 未安装，当前 Python 环境不可用。\n"
+            "请先执行：pip install -r requirements.txt\n"
+            "若使用本项目虚拟环境，请执行：source .venv/bin/activate"
+        ) from e
 
     primary_uri = os.environ.get("RQDATA_PRIMARY_URI")
     if not primary_uri:
@@ -82,4 +89,13 @@ def get_store_path() -> Path:
             "[ERROR] 未设置环境变量 RQDATA_STORE_PATH\n"
             "请在 ~/.bashrc 中添加：export RQDATA_STORE_PATH='/path/to/data'"
         )
-    return Path(store)
+    p = Path(store).expanduser()
+    if not p.is_absolute():
+        raise RuntimeError(
+            f"[ERROR] RQDATA_STORE_PATH 必须是绝对路径，当前值: {store!r}"
+        )
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise RuntimeError(f"[ERROR] RQDATA_STORE_PATH 不可用: {p} ({e})") from e
+    return p

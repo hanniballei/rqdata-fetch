@@ -1,3 +1,5 @@
+import builtins
+import os
 import sys
 import tempfile
 import unittest
@@ -11,6 +13,7 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+import common  # noqa: E402
 import fetch_futures  # noqa: E402
 import fetch_stocks  # noqa: E402
 
@@ -200,6 +203,39 @@ class FinancialQuarterValidationTests(unittest.TestCase):
 
         self.assertEqual(rc, 1)
         run_financials.assert_not_called()
+
+
+class CommonHelpersTests(unittest.TestCase):
+    def test_init_rqdatac_reports_missing_dependency(self):
+        real_import = builtins.__import__
+
+        def _fake_import(name, *args, **kwargs):
+            if name == "rqdatac":
+                raise ModuleNotFoundError("No module named 'rqdatac'")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=_fake_import):
+            with self.assertRaises(RuntimeError) as ctx:
+                common.init_rqdatac()
+
+        self.assertIn("rqdatac 未安装", str(ctx.exception))
+
+    def test_get_store_path_expands_user_home(self):
+        with tempfile.TemporaryDirectory() as td, patch.dict(
+            os.environ,
+            {"HOME": td, "RQDATA_STORE_PATH": "~/rqdata_store"},
+            clear=False,
+        ):
+            p = common.get_store_path()
+
+        self.assertEqual(p, Path(td) / "rqdata_store")
+
+    def test_get_store_path_rejects_relative_path(self):
+        with patch.dict(os.environ, {"RQDATA_STORE_PATH": "relative_store"}, clear=False):
+            with self.assertRaises(RuntimeError) as ctx:
+                common.get_store_path()
+
+        self.assertIn("必须是绝对路径", str(ctx.exception))
 
 
 if __name__ == "__main__":
